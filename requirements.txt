@@ -1,0 +1,7 @@
+# Versions testees dans cet environnement (voir README.md pour le detail
+# des tests effectues avant livraison).
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-multipart>=0.0.9
+wntr==1.5.0
+numpy==2.4.4

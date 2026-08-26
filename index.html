@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aqua Twin — Réseau hydraulique (Jumeau numérique)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      /* --- habillage general (cockpit sombre) --- */
+      --bg: #0b1116;
+      --panel: #10181f;
+      --panel-2: #141f28;
+      --border: #223038;
+      --border-soft: #1a262e;
+      --text: #dfe8ec;
+      --muted: #6f8592;
+      --muted-dim: #4a5d68;
+
+      --ok: #35d08a;
+      --ok-dim: rgba(53, 208, 138, 0.12);
+      --fault: #ff5d5f;
+      --fault-dim: rgba(255, 93, 95, 0.12);
+      --warn: #f0a83c;
+      --select: #3aa0ff;
+      --select-dim: rgba(58, 160, 255, 0.14);
+
+      --font-display: 'Oswald', sans-serif;
+      --font-body: 'IBM Plex Sans', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+
+      /* --- planche du schema (fond blanc grisatre, comme un plan technique) --- */
+      --map-bg-1: #eef1f3;
+      --map-bg-2: #e2e7ea;
+      --map-grid: #c9d2d8;
+      --map-grid-major: #b7c2c9;
+      --map-frame: #c3ccd2;
+      --map-ink: #33424c;
+      --map-ink-soft: #64747e;
+      --map-node-stroke: #ffffff;
+      --map-legend-bg: rgba(255, 255, 255, 0.92);
+      --map-legend-border: #ccd5db;
+      --map-legend-text: #3b4a54;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(1200px 600px at 15% -10%, rgba(58, 160, 255, 0.05), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection {
+      background: var(--select-dim);
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--select);
+      outline-offset: 2px;
+    }
+
+    button {
+      font-family: var(--font-body);
+      cursor: pointer;
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: border-color .15s ease, background .15s ease;
+    }
+
+    button:hover:not(:disabled) {
+      border-color: var(--select);
+    }
+
+    button:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+    }
+
+    button.primary {
+      background: var(--select-dim);
+      border-color: var(--select);
+      color: #bfe1ff;
+    }
+
+    button.danger {
+      background: var(--fault-dim);
+      border-color: var(--fault);
+      color: #ffc7c7;
+    }
+
+    button.ghost {
+      background: transparent;
+    }
+
+    button.icon {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    input[type=text],
+    input[type=number],
+    select {
+      font-family: var(--font-mono);
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 9px;
+      font-size: 13px;
+    }
+
+    input[type=range] {
+      accent-color: var(--select);
+      width: 100%;
+    }
+
+    /* ---------- layout shell ---------- */
+    .shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--border-soft);
+      background: linear-gradient(180deg, #0d141a, #0b1116);
+      flex: 0 0 auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand .mark {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      background: conic-gradient(from 220deg, var(--select), var(--ok), var(--warn), var(--select));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 14px;
+      color: #04141f;
+    }
+
+    .brand h1 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      letter-spacing: .02em;
+      font-size: 17px;
+      margin: 0;
+      text-transform: uppercase;
+    }
+
+    .brand .tag {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: .03em;
+      padding: 5px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .status-pill .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted-dim);
+    }
+
+    .status-pill.live {
+      border-color: var(--ok);
+      color: #a8f3cf;
+    }
+
+    .status-pill.live .dot {
+      background: var(--ok);
+      box-shadow: 0 0 8px var(--ok);
+    }
+
+    .status-pill.down {
+      border-color: var(--fault);
+      color: #ffc7c7;
+    }
+
+    .status-pill.down .dot {
+      background: var(--fault);
+    }
+
+    header .spacer {
+      flex: 1;
+    }
+
+    header .upload-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    header .upload-group label.filepick {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    header .upload-group label.filepick:hover {
+      border-color: var(--select);
+      color: var(--text);
+    }
+
+    header .upload-group input[type=file] {
+      display: none;
+    }
+
+    /* ---------- body grid ---------- */
+    .body-grid {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 250px 1fr 250px;
+      grid-template-rows: 75vh auto;
+      grid-template-areas:
+        "inspector map gauges"
+        "tables tables tables";
+    }
+
+    @media (max-width: 1100px) {
+      .body-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto auto;
+        grid-template-areas: "map" "inspector" "gauges" "tables";
+      }
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border-soft);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .panel>.panel-head {
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--border-soft);
+      font-family: var(--font-display);
+      font-size: 11px;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel>.panel-body {
+      padding: 14px;
+      overflow: auto;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ---------- inspector ---------- */
+    #inspector {
+      grid-area: inspector;
+      border-right: 1px solid var(--border-soft);
+      border-left: none;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field .k {
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      margin-bottom: 3px;
+    }
+
+    .field .v {
+      font-family: var(--font-mono);
+      font-size: 15px;
+    }
+
+    .empty-hint {
+      color: var(--muted-dim);
+      font-size: 12.5px;
+      line-height: 1.6;
+    }
+
+    .empty-hint svg {
+      display: block;
+      margin: 6px 0 12px;
+      opacity: .5;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    .badge.open {
+      background: var(--ok-dim);
+      color: var(--ok);
+    }
+
+    .badge.closed {
+      background: var(--fault-dim);
+      color: var(--fault);
+    }
+
+    .badge.active {
+      background: var(--select-dim);
+      color: var(--select);
+    }
+
+    .ctrl-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .ctrl-row button {
+      flex: 1;
+    }
+
+    hr.sep {
+      border: none;
+      border-top: 1px solid var(--border-soft);
+      margin: 16px 0;
+    }
+
+    .time-readout {
+      font-family: var(--font-mono);
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+
+    .time-readout .unit {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .transport {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 10px 0;
+    }
+
+    .speed-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .speed-row select {
+      flex: 1;
+    }
+
+    /* ---------- carte du reseau : planche technique claire ---------- */
+    #mapPanel {
+      grid-area: map;
+      border-right: 1px solid var(--border-soft);
+      position: relative;
+    }
+
+    #mapPanel .panel-body {
+      padding: 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #mapCanvas {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, var(--map-bg-1), var(--map-bg-2));
+      border-top: 1px solid var(--map-frame);
+    }
+
+    #netSvg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+    }
+
+    #netSvg.dragging {
+      cursor: grabbing;
+    }
+
+    .map-toolbar {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 5;
+    }
+
+    .map-toolbar button {
+      background: rgba(16, 24, 31, 0.85);
+    }
+
+    .scale-readout {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 5;
+      background: var(--map-legend-bg);
+      border: 1px solid var(--map-legend-border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--map-legend-text);
+    }
+
+    .legend {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      z-index: 5;
+      background: var(--map-legend-bg);
+      border: 1px solid var(--map-legend-border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 11px;
+      color: var(--map-legend-text);
+      font-family: var(--font-mono);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 4px 14px rgba(20, 30, 38, 0.10);
+    }
+
+    .legend .title {
+      font-family: var(--font-display);
+      font-size: 9.5px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #5b6b75;
+      margin-bottom: 2px;
+    }
+
+    .legend .row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .legend .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 3px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+    }
+
+    .legend .swatch.circle {
+      border-radius: 50%;
+    }
+
+    .legend .swatch.diamond {
+      transform: rotate(45deg);
+      border-radius: 2px;
+    }
+
+    .legend .grad {
+      width: 78px;
+      height: 9px;
+      border-radius: 3px;
+      background: linear-gradient(90deg, #2f6fb0, #1f9d63, #c98423, #c53434);
+      border: 1px solid rgba(0, 0, 0, 0.15);
+    }
+
+    .empty-map {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 10px;
+      color: #56636c;
+      text-align: center;
+      padding: 30px;
+    }
+
+    .empty-map .big {
+      font-family: var(--font-display);
+      font-size: 16px;
+      color: #2c3941;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    .empty-map .small {
+      font-size: 12.5px;
+      max-width: 340px;
+      line-height: 1.6;
+    }
+
+    /* infobulle survol element */
+    .hover-tip {
+      position: absolute;
+      z-index: 8;
+      pointer-events: none;
+      background: rgba(20, 28, 35, 0.94);
+      color: #e8eef2;
+      border: 1px solid #2c3a44;
+      border-radius: 6px;
+      padding: 6px 9px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: nowrap;
+      transform: translate(-50%, -100%);
+      margin-top: -10px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .hover-tip b {
+      color: #fff;
+    }
+
+    /* ---------- gauges ---------- */
+    #gauges {
+      grid-area: gauges;
+      border-left: 1px solid var(--border-soft);
+    }
+
+    .gauge {
+      margin-bottom: 16px;
+    }
+
+    .gauge .k {
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
+
+    .gauge .v {
+      font-family: var(--font-mono);
+      font-size: 22px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    .gauge .v small {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .gauge .bar-track {
+      height: 5px;
+      border-radius: 4px;
+      background: var(--panel-2);
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .gauge .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width .3s ease;
+    }
+
+    /* ---------- tables ---------- */
+    #tablesPanel {
+      grid-area: tables;
+      border-top: 1px solid var(--border-soft);
+      height: 250px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .tabs button {
+      padding: 5px 12px;
+      border-radius: 5px 5px 0 0;
+    }
+
+    .tabs button.active {
+      background: var(--panel-2);
+      border-color: var(--select);
+      color: var(--select);
+    }
+
+    #tablesPanel .panel-body {
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .table-toolbar {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .table-toolbar input {
+      flex: 0 0 220px;
+    }
+
+    .table-toolbar .count {
+      color: var(--muted);
+      font-size: 11.5px;
+      font-family: var(--font-mono);
+    }
+
+    .table-scroll {
+      overflow: auto;
+      flex: 1;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      font-family: var(--font-mono);
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--panel-2);
+      text-align: left;
+      padding: 7px 12px;
+      color: var(--muted);
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 1px solid var(--border-soft);
+      white-space: nowrap;
+    }
+
+    thead th:hover {
+      color: var(--select);
+    }
+
+    thead th .arrow {
+      opacity: .5;
+      margin-left: 3px;
+    }
+
+    tbody td {
+      padding: 5px 12px;
+      border-bottom: 1px solid var(--border-soft);
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      cursor: pointer;
+    }
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    tbody tr.selected {
+      background: var(--select-dim);
+    }
+
+    /* ---------- toast ---------- */
+    #toastHost {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      font-size: 13px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      max-width: 360px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      animation: slidein .18s ease;
+    }
+
+    .toast.error {
+      border-color: var(--fault);
+      color: #ffc7c7;
+    }
+
+    .toast.ok {
+      border-color: var(--ok);
+      color: #a8f3cf;
+    }
+
+    @keyframes slidein {
+      from {
+        transform: translateY(8px);
+        opacity: 0;
+      }
+
+      to {
+        transform: none;
+        opacity: 1;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="shell">
+
+    <header>
+      <div class="brand">
+        <div class="mark">ATw</div>
+        <div>
+          <h1>Aqua Twin</h1>
+          <div class="tag">Réseau hydraulique (Jumeau numérique) — WNTR / EPANET</div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="upload-group">
+        <label class="filepick" for="fileInput">
+          <span id="fileLabel">Charger un fichier .inp</span>
+        </label>
+        <input type="file" id="fileInput" accept=".inp">
+        <button class="icon ghost" id="settingsBtn" title="Adresse de l'API">⚙</button>
+      </div>
+
+      <span class="status-pill down" id="apiStatus"><span class="dot"></span><span id="apiStatusLabel">API hors
+          ligne</span></span>
+    </header>
+
+    <div id="apiSettings"
+      style="display:none; padding:10px 18px; border-bottom:1px solid var(--border-soft); background:var(--panel); gap:10px; align-items:center;">
+      <span style="color:var(--muted); font-size:12px;">Adresse de l'API :</span>
+      <input type="text" id="apiBaseInput" style="width:280px;" value="http://127.0.0.1:8000/api">
+      <button id="apiBaseSave" class="primary">Appliquer</button>
+    </div>
+
+    <div class="body-grid">
+
+      <!-- INSPECTOR -->
+      <div class="panel" id="inspector">
+        <div class="panel-head">Inspecteur</div>
+        <div class="panel-body" id="inspectorBody">
+          <div class="empty-hint">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8v5l3 2" />
+            </svg>
+            Sélectionnez une pompe, une vanne ou une conduite sur le schéma (ou dans le tableau) pour l'inspecter et la
+            commander.
+          </div>
+
+          <hr class="sep">
+
+          <div class="field">
+            <div class="k">Temps simulé</div>
+            <div class="time-readout"><span id="timeReadout">--:--</span><span class="unit" id="timeReadoutSub"></span>
+            </div>
+          </div>
+
+          <div class="transport">
+            <button class="icon" id="btnFirst" title="Retour au début" disabled>⏮</button>
+            <button class="icon" id="btnStepBack" title="Pas précédent" disabled>◀</button>
+            <button class="icon primary" id="btnPlay" title="Lecture" disabled>▶</button>
+            <button class="icon" id="btnStepFwd" title="Pas suivant" disabled>▶|</button>
+          </div>
+          <input type="range" id="timeSlider" min="0" max="0" value="0" step="1" disabled>
+
+          <div class="speed-row">
+            <span>Vitesse</span>
+            <select id="speedSelect">
+              <option value="1200">Lente</option>
+              <option value="600" selected>Normale</option>
+              <option value="250">Rapide</option>
+              <option value="80">Très rapide</option>
+            </select>
+          </div>
+
+          <hr class="sep">
+          <button id="btnResetControls" class="ghost" style="width:100%;" disabled>↺ Réinitialiser les
+            commandes</button>
+        </div>
+      </div>
+
+      <!-- MAP -->
+      <div class="panel" id="mapPanel">
+        <div class="panel-head">
+          <span>Schéma du réseau</span>
+          <span id="mapMeta" style="font-family:var(--font-mono); text-transform:none; letter-spacing:0;"></span>
+        </div>
+        <div class="panel-body">
+          <div id="mapCanvas">
+            <svg id="netSvg" viewBox="0 0 1000 700">
+              <defs>
+                <pattern id="gridPattern" width="10" height="10" patternUnits="userSpaceOnUse">
+                  <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#c9d2d8" stroke-width="0.5" />
+                </pattern>
+                <pattern id="gridPatternMajor" width="50" height="50" patternUnits="userSpaceOnUse">
+                  <rect width="50" height="50" fill="url(#gridPattern)" />
+                  <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#b7c2c9" stroke-width="0.8" />
+                </pattern>
+              </defs>
+              <g id="netG"></g>
+            </svg>
+          </div>
+          <div class="map-toolbar">
+            <button class="icon" id="btnZoomIn" title="Zoom avant">+</button>
+            <button class="icon" id="btnZoomOut" title="Zoom arrière">−</button>
+            <button class="icon" id="btnFit" title="Ajuster la vue">⤢</button>
+          </div>
+          <div class="scale-readout" id="scaleReadout" style="display:none;"></div>
+          <div class="legend" id="mapLegend" style="display:none;">
+            <div class="title">Pression aux nœuds</div>
+            <div class="row"><span class="grad"></span><span>basse → haute</span></div>
+            <div class="title" style="margin-top:2px;">Éléments</div>
+            <div class="row"><span class="swatch"
+                style="background:#f4f6f8; border:1.5px solid #33424c;"></span>Jonction</div>
+            <div class="row"><span class="swatch"
+                style="background:#7c8f9c; border:1.5px solid #33424c;"></span>Réservoir</div>
+            <div class="row"><span class="swatch circle" style="background:#2f6fb0;"></span>Pompe</div>
+            <div class="row"><span class="swatch diamond" style="background:#8a5fb0;"></span>Vanne</div>
+            <div class="row"><span class="swatch"
+                style="background:#5c6a73; height:3px; border-radius:2px;"></span>Conduite ouverte</div>
+            <div class="row"><span class="swatch"
+                style="background:#c53434; height:3px; border-radius:2px; border-style:dashed;"></span>Conduite fermée
+            </div>
+            <div class="row"><span class="swatch circle"
+                style="background:#1d78e0; box-shadow:0 0 0 3px rgba(29,120,224,0.25);"></span>Sélection</div>
+          </div>
+          <div class="empty-map" id="emptyMap">
+            <div class="big">Aucun réseau chargé</div>
+            <div class="small">Charge un fichier .inp depuis le bandeau supérieur pour afficher le schéma, lancer la
+              simulation étendue et contrôler les éléments.</div>
+          </div>
+          <div class="hover-tip" id="hoverTip" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- GAUGES -->
+      <div class="panel" id="gauges">
+        <div class="panel-head">Indicateurs</div>
+        <div class="panel-body">
+          <div class="gauge">
+            <div class="k">Pression moyenne</div>
+            <div class="v" id="gAvgPressure">– <small>m</small></div>
+            <div class="bar-track">
+              <div class="bar-fill" id="gAvgPressureBar" style="width:0%; background:var(--select);"></div>
+            </div>
+          </div>
+          <div class="gauge">
+            <div class="k">Débit total (liens ouverts)</div>
+            <div class="v" id="gTotalFlow">– <small>m³/s</small></div>
+          </div>
+          <div class="gauge">
+            <div class="k">Liens ouverts</div>
+            <div class="v" id="gLinksOpen">–</div>
+            <div class="bar-track">
+              <div class="bar-fill" id="gLinksOpenBar" style="width:0%; background:var(--ok);"></div>
+            </div>
+          </div>
+          <div class="gauge">
+            <div class="k">Progression simulation</div>
+            <div class="v" id="gProgress">– <small>%</small></div>
+            <div class="bar-track">
+              <div class="bar-fill" id="gProgressBar" style="width:0%; background:var(--warn);"></div>
+            </div>
+          </div>
+          <div class="gauge">
+            <div class="k">Composants</div>
+            <div class="v" id="gComponents" style="font-size:14px; line-height:1.7;">–</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABLES -->
+      <div class="panel" id="tablesPanel">
+        <div class="panel-head">
+          <div class="tabs">
+            <button class="active" id="tabNodes">Nœuds</button>
+            <button id="tabLinks">Liens</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="table-toolbar">
+            <input type="text" id="tableSearch" placeholder="Filtrer par ID...">
+            <span class="count" id="tableCount"></span>
+          </div>
+          <div class="table-scroll">
+            <table id="dataTable">
+              <thead>
+                <tr id="tableHead"></tr>
+              </thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toastHost"></div>
+
+  <script>
+    /* ==========================================================
+       COULEURS (valeurs figees en JS - les attributs SVG presentation
+       ne resolvent pas var() de facon fiable sur tous les moteurs).
+       Palette adaptee a un schema sur fond CLAIR : tons plus profonds/
+       satures que sur un theme sombre, pour garder du contraste sur
+       fond blanc grisatre.
+       ========================================================== */
+    const HEX = {
+      select: '#1d78e0',
+      ok: '#178a53',
+      fault: '#c53434',
+      faultSoft: 'rgba(197,52,52,0.14)',
+      ink: '#33424c',
+      inkSoft: '#64747e',
+      pump: '#2f6fb0',
+      pumpClosed: '#c53434',
+      valve: '#8a5fb0',
+      valveClosed: '#c53434',
+      reservoir: '#7c8f9c',
+      nodeStroke: '#ffffff',
+    };
+
+    /* ==========================================================
+       ETAT GLOBAL
+       ========================================================== */
+    const state = {
+      apiBase: 'http://127.0.0.1:8000/api',
+      loaded: false,
+      topology: null,
+      things: [],
+      snapshot: null,
+      selected: null,
+      totalTicks: 0,
+      durationS: 0,
+      isPlaying: false,
+      playTimer: null,
+      pan: { x: 0, y: 0, scale: 1 },
+      dragging: false,
+      activeTable: 'nodes',
+      tableSort: { key: 'id', dir: 1 },
+    };
+
+    /* ==========================================================
+       UTILITAIRES
+       ========================================================== */
+    function toast(msg, type = 'ok') {
+      const host = document.getElementById('toastHost');
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = msg;
+      host.appendChild(el);
+      setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 4200);
+    }
+
+    async function api(method, path, body) {
+      const url = state.apiBase + path;
+      const opts = { method, headers: {} };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      let res;
+      try {
+        res = await fetch(url, opts);
+      } catch (e) {
+        throw new Error("Impossible de joindre l'API (" + state.apiBase + "). Vérifiez que le serveur tourne et l'adresse configurée.");
+      }
+      let data = null;
+      try { data = await res.json(); } catch (e) { /* pas de corps */ }
+      if (!res.ok) {
+        const detail = (data && data.detail) ? data.detail : `Erreur HTTP ${res.status}`;
+        throw new Error(detail);
+      }
+      return data;
+    }
+    async function apiUpload(file) {
+      const url = state.apiBase + '/upload';
+      const fd = new FormData();
+      fd.append('file', file);
+      let res;
+      try { res = await fetch(url, { method: 'POST', body: fd }); }
+      catch (e) { throw new Error("Impossible de joindre l'API pour l'upload."); }
+      let data = null;
+      try { data = await res.json(); } catch (e) { }
+      if (!res.ok) { throw new Error((data && data.detail) || `Erreur HTTP ${res.status}`); }
+      return data;
+    }
+
+    function fmt(v, digits = 2) {
+      if (v === null || v === undefined || Number.isNaN(v)) return '–';
+      return Number(v).toFixed(digits);
+    }
+    function fmtTime(seconds) {
+      const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60);
+      return { main: String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'), sub: `jour ${Math.floor(h / 24) + 1}` };
+    }
+
+    /* ==========================================================
+       SANTE API (polling + resynchronisation si un reseau est deja charge)
+       ========================================================== */
+    async function pollHealth() {
+      const pill = document.getElementById('apiStatus');
+      const label = document.getElementById('apiStatusLabel');
+      try {
+        const h = await api('GET', '/health');
+        pill.className = 'status-pill live';
+        label.textContent = h.network_loaded ? 'API connectée · réseau chargé' : 'API connectée';
+        if (h.network_loaded && !state.loaded) {
+          try { await onNetworkLoaded(); document.getElementById('fileLabel').textContent = 'Réseau synchronisé'; }
+          catch (e) { /* pas grave, on retentera au prochain poll */ }
+        }
+      } catch (e) {
+        pill.className = 'status-pill down';
+        label.textContent = 'API hors ligne';
+      }
+    }
+    setInterval(pollHealth, 5000);
+
+    /* ==========================================================
+       PARAMETRES API
+       ========================================================== */
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      const box = document.getElementById('apiSettings');
+      box.style.display = box.style.display === 'none' ? 'flex' : 'none';
+    });
+    document.getElementById('apiBaseSave').addEventListener('click', () => {
+      const v = document.getElementById('apiBaseInput').value.trim();
+      if (v) { state.apiBase = v.replace(/\/$/, ''); toast('Adresse API mise à jour'); pollHealth(); }
+    });
+
+    /* ==========================================================
+       UPLOAD
+       ========================================================== */
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      document.getElementById('fileLabel').textContent = 'Chargement...';
+      try {
+        const result = await apiUpload(file);
+        document.getElementById('fileLabel').textContent = file.name;
+        state.durationS = result.duration_s;
+        state.totalTicks = result.total_ticks;
+        toast(`Réseau "${file.name}" chargé — simulation sur ${(result.duration_s / 3600).toFixed(0)}h (${result.total_ticks} pas)`, 'ok');
+        await onNetworkLoaded();
+      } catch (err) {
+        document.getElementById('fileLabel').textContent = 'Charger un fichier .inp';
+        toast(err.message, 'error');
+      }
+    });
+
+    async function onNetworkLoaded() {
+      state.loaded = true;
+      document.getElementById('emptyMap').style.display = 'none';
+      document.getElementById('mapLegend').style.display = 'flex';
+      document.getElementById('scaleReadout').style.display = 'block';
+      document.getElementById('btnFirst').disabled = false;
+      document.getElementById('btnStepBack').disabled = false;
+      document.getElementById('btnStepFwd').disabled = false;
+      document.getElementById('btnPlay').disabled = false;
+      document.getElementById('timeSlider').disabled = false;
+      document.getElementById('btnResetControls').disabled = false;
+
+      state.topology = await api('GET', '/topology');
+      state.things = await api('GET', '/things');
+
+      document.getElementById('timeSlider').max = state.totalTicks - 1;
+      document.getElementById('mapMeta').textContent =
+        `${state.topology.nodes.length} nœuds · ${state.topology.links.length} liens`;
+
+      drawTopology();
+      await refreshSnapshot();
+      fitView();
+    }
+
+    /* ==========================================================
+       CARTE DU RESEAU (SVG, fond clair type planche technique)
+       ========================================================== */
+    function nodeById(id) { return state.topology.nodes.find(n => n.id === id); }
+
+    // L'axe Y des fichiers EPANET/SIG croit vers le haut ; celui de SVG croit
+    // vers le bas. On inverse Y a la lecture pour que le reseau ne s'affiche
+    // pas retourne.
+    function nx(n) { return n.x; }
+    function ny(n) { return -n.y; }
+
+    function drawTopology() {
+      const g = document.getElementById('netG');
+      g.innerHTML = '';
+
+      const xs = state.topology.nodes.map(nx), ys = state.topology.nodes.map(ny);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const spanX = (maxX - minX) || 1, spanY = (maxY - minY) || 1;
+      const pad = Math.max(spanX, spanY) * 0.10;
+      state._bounds = { minX: minX - pad, minY: minY - pad, spanX: spanX + 2 * pad, spanY: spanY + 2 * pad };
+
+      // Rayons/epaisseurs exprimes en fraction de la diagonale du reseau, pas en
+      // unites absolues : les coordonnees EPANET vont d'echelles metriques (0-50)
+      // a des echelles cartographiques (millions) selon les fichiers.
+      const diag = Math.sqrt(spanX * spanX + spanY * spanY);
+      const unit = diag / 140;
+      const R_JUNCTION = unit * 0.62;
+      const R_TANKRES = unit * 1.6;
+      const R_GLYPH = unit * 1.25;
+      const PIPE_W = Math.max(unit * 0.16, diag * 0.0011);
+      const LINK_W = Math.max(unit * 0.34, diag * 0.0022);
+      state._unit = unit;
+
+      // Grille de fond (planche technique) : suit le pan/zoom car elle vit dans
+      // le meme groupe transforme que le reseau, ce qui donne un vrai repere
+      // d'echelle quand on zoome/deplace la vue.
+      const gridRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      gridRect.setAttribute('x', state._bounds.minX - state._bounds.spanX);
+      gridRect.setAttribute('y', state._bounds.minY - state._bounds.spanY);
+      gridRect.setAttribute('width', state._bounds.spanX * 3);
+      gridRect.setAttribute('height', state._bounds.spanY * 3);
+      gridRect.setAttribute('fill', 'url(#gridPatternMajor)');
+      g.appendChild(gridRect);
+      // La taille de la grille (definie en unites utilisateur fixes de 10/50)
+      // doit etre mise a l'echelle du reseau : on redimensionne le pattern via
+      // patternTransform plutot que de re-fabriquer un pattern par reseau.
+      const gridStep = Math.pow(10, Math.round(Math.log10(unit * 4)));
+      ['gridPattern', 'gridPatternMajor'].forEach(id => {
+        const p = document.getElementById(id);
+        if (p) p.setAttribute('patternTransform', `scale(${gridStep / 10})`);
+      });
+      document.getElementById('scaleReadout').textContent = `échelle repère : ${fmt(gridStep, 0)} unités / carreau`;
+
+      // Trois calques distincts, ajoutes dans cet ordre precis : traits, puis
+      // noeuds, puis glyphes pompe/vanne. Une pompe reliee directement a un
+      // reservoir voisin place son glyphe tres pres du noeud reservoir ; sans
+      // calque separe et prioritaire, le noeud intercepte le clic et rend
+      // l'element impossible a selectionner (verifie avec Playwright/Chromium
+      // sur le cas reel de Net3 : pompe 10 collee au reservoir Lake).
+      const lineLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      lineLayer.setAttribute('id', 'lineLayer');
+      const glyphLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      glyphLayer.setAttribute('id', 'glyphLayer');
+
+      state.topology.links.forEach(link => {
+        const n1 = nodeById(link.start), n2 = nodeById(link.end);
+        if (!n1 || !n2) return;
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', nx(n1)); line.setAttribute('y1', ny(n1));
+        line.setAttribute('x2', nx(n2)); line.setAttribute('y2', ny(n2));
+        line.setAttribute('data-link-id', link.id);
+        line.setAttribute('data-link-type', link.type);
+        line.setAttribute('stroke-width', link.type === 'pipe' ? PIPE_W : LINK_W);
+        line.setAttribute('stroke-linecap', 'round');
+        line.setAttribute('class', 'net-link');
+        line.style.cursor = 'pointer';
+        line.addEventListener('click', (ev) => { ev.stopPropagation(); selectThing(`${link.type}-${link.id}`); });
+        line.addEventListener('mouseenter', (ev) => showHoverTip(ev, `${link.type}-${link.id}`));
+        line.addEventListener('mousemove', moveHoverTip);
+        line.addEventListener('mouseleave', hideHoverTip);
+        lineLayer.appendChild(line);
+
+        if (link.type === 'pump' || link.type === 'valve') {
+          const mx = (nx(n1) + nx(n2)) / 2, my = (ny(n1) + ny(n2)) / 2;
+          let glyph;
+          if (link.type === 'pump') {
+            glyph = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            glyph.setAttribute('cx', mx); glyph.setAttribute('cy', my);
+            glyph.setAttribute('r', R_GLYPH);
+          } else {
+            glyph = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            const s = R_GLYPH * 1.35;
+            glyph.setAttribute('x', mx - s / 2); glyph.setAttribute('y', my - s / 2);
+            glyph.setAttribute('width', s); glyph.setAttribute('height', s);
+            glyph.setAttribute('transform', `rotate(45 ${mx} ${my})`);
+          }
+          glyph.setAttribute('data-link-id', link.id);
+          glyph.setAttribute('data-link-type', link.type);
+          glyph.setAttribute('class', 'net-glyph');
+          glyph.setAttribute('stroke', HEX.nodeStroke);
+          glyph.setAttribute('stroke-width', unit * 0.16);
+          glyph.style.cursor = 'pointer';
+          glyph.addEventListener('click', (ev) => { ev.stopPropagation(); selectThing(`${link.type}-${link.id}`); });
+          glyph.addEventListener('mouseenter', (ev) => showHoverTip(ev, `${link.type}-${link.id}`));
+          glyph.addEventListener('mousemove', moveHoverTip);
+          glyph.addEventListener('mouseleave', hideHoverTip);
+          glyphLayer.appendChild(glyph);
+        }
+      });
+      g.appendChild(lineLayer);
+
+      // --- noeuds (au-dessus des traits, sous les glyphes) ---
+      const nodeLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      nodeLayer.setAttribute('id', 'nodeLayer');
+      state.topology.nodes.forEach(n => {
+        const shape = document.createElementNS('http://www.w3.org/2000/svg', n.type === 'junction' ? 'circle' : 'rect');
+        const r = n.type === 'junction' ? R_JUNCTION : R_TANKRES;
+        if (n.type === 'junction') {
+          shape.setAttribute('cx', nx(n)); shape.setAttribute('cy', ny(n)); shape.setAttribute('r', r);
+        } else {
+          shape.setAttribute('x', nx(n) - r); shape.setAttribute('y', ny(n) - r);
+          shape.setAttribute('width', r * 2); shape.setAttribute('height', r * 2);
+          shape.setAttribute('rx', r * 0.22);
+        }
+        shape.setAttribute('data-node-id', n.id);
+        shape.setAttribute('data-node-type', n.type);
+        shape.setAttribute('class', 'net-node');
+        shape.setAttribute('stroke', HEX.nodeStroke);
+        shape.setAttribute('stroke-width', n.type === 'junction' ? unit * 0.09 : unit * 0.16);
+        shape.style.cursor = (n.type !== 'junction') ? 'pointer' : 'default';
+        if (n.type !== 'junction') {
+          shape.addEventListener('click', (ev) => { ev.stopPropagation(); selectThing(`${n.type}-${n.id}`); });
+        }
+        shape.addEventListener('mouseenter', (ev) => showHoverTip(ev, `${n.type}-${n.id}`));
+        shape.addEventListener('mousemove', moveHoverTip);
+        shape.addEventListener('mouseleave', hideHoverTip);
+        nodeLayer.appendChild(shape);
+      });
+      g.appendChild(nodeLayer);
+      g.appendChild(glyphLayer);
+
+      applyViewBox();
+    }
+
+    function pressureColor(p, pMin, pMax) {
+      // Echelle 4 points : bleu (bas) -> vert -> ambre -> rouge (haut).
+      // Tons assombris par rapport a une palette "neon" : necessaire pour
+      // rester lisible sur le fond clair de la planche.
+      if (p === null || p === undefined || Number.isNaN(p)) return '#8a97a0';
+      const t = pMax > pMin ? Math.max(0, Math.min(1, (p - pMin) / (pMax - pMin))) : 0.5;
+      const stops = [
+        { t: 0.0, c: [47, 111, 176] },
+        { t: 0.4, c: [31, 157, 99] },
+        { t: 0.7, c: [201, 132, 35] },
+        { t: 1.0, c: [197, 52, 52] },
+      ];
+      let a = stops[0], b = stops[stops.length - 1];
+      for (let i = 0; i < stops.length - 1; i++) {
+        if (t >= stops[i].t && t <= stops[i + 1].t) { a = stops[i]; b = stops[i + 1]; break; }
+      }
+      const span = (b.t - a.t) || 1;
+      const lt = (t - a.t) / span;
+      const c = a.c.map((v, i) => Math.round(v + (b.c[i] - v) * lt));
+      return `rgb(${c[0]},${c[1]},${c[2]})`;
+    }
+
+    function renderSnapshotOnMap() {
+      if (!state.snapshot) return;
+      const things = state.snapshot.things;
+
+      const pressures = Object.values(things)
+        .filter(t => 'pressure_m' in t)
+        .map(t => t.pressure_m);
+      const pMin = Math.min(...pressures), pMax = Math.max(...pressures);
+
+      document.querySelectorAll('.net-node').forEach(el => {
+        const id = el.getAttribute('data-node-id');
+        const type = el.getAttribute('data-node-type');
+        const key = `${type}-${id}`;
+        const data = things[key];
+        const isSelected = state.selected === key;
+        let p = (data && 'pressure_m' in data) ? data.pressure_m : null;
+
+        if (type === 'reservoir') {
+          el.setAttribute('fill', HEX.reservoir);
+        } else {
+          el.setAttribute('fill', p !== null ? pressureColor(p, pMin, pMax) : '#8a97a0');
+        }
+        el.setAttribute('stroke', isSelected ? HEX.select : HEX.nodeStroke);
+        el.setAttribute('stroke-width', isSelected ? (state._unit * 0.28) : (type === 'junction' ? state._unit * 0.09 : state._unit * 0.16));
+      });
+
+      document.querySelectorAll('.net-link, .net-glyph').forEach(el => {
+        const linkId = el.getAttribute('data-link-id');
+        const linkType = el.getAttribute('data-link-type') || state.topology.links.find(l => l.id === linkId)?.type;
+        const key = `${linkType}-${linkId}`;
+        const data = things[key];
+        const isSelected = state.selected === key;
+        const isOpen = data ? data.status === 'Open' || data.status === 'Active' : true;
+
+        if (el.classList.contains('net-link')) {
+          el.setAttribute('stroke', isSelected ? HEX.select : (isOpen ? HEX.ink : HEX.fault));
+          el.setAttribute('stroke-dasharray', isOpen ? '0' : '3,2.4');
+          if (isOpen && data && 'flowrate_m3s' in data) {
+            const v = Math.min(1, Math.abs(data.flowrate_m3s) * 3);
+            el.setAttribute('stroke-opacity', isSelected ? 1 : 0.5 + v * 0.5);
+          } else {
+            el.setAttribute('stroke-opacity', isSelected ? 1 : 0.85);
+          }
+        } else {
+          // glyphe pompe (cercle) ou vanne (losange)
+          const baseColor = linkType === 'pump' ? HEX.pump : HEX.valve;
+          el.setAttribute('fill', isSelected ? HEX.select : (isOpen ? baseColor : HEX.fault));
+          el.setAttribute('stroke', isSelected ? '#dbeeff' : HEX.nodeStroke);
+        }
+      });
+    }
+
+    /* --- infobulle au survol --- */
+    function thingLabel(key) {
+      const data = state.snapshot?.things[key];
+      if (!data) return key;
+      const [type, ...rest] = key.split('-');
+      const id = rest.join('-');
+      if ('status' in data) {
+        return `<b>${type} ${id}</b> — ${data.status} · ${fmt(data.flowrate_m3s, 4)} m³/s`;
+      }
+      if ('pressure_m' in data) {
+        return `<b>${type} ${id}</b> — ${fmt(data.pressure_m)} m`;
+      }
+      if ('level_head_m' in data) {
+        return `<b>${type} ${id}</b> — niveau ${fmt(data.level_head_m)} m`;
+      }
+      if ('head_m' in data) {
+        return `<b>${type} ${id}</b> — charge ${fmt(data.head_m)} m`;
+      }
+      return `<b>${type} ${id}</b>`;
+    }
+    function showHoverTip(ev, key) {
+      const tip = document.getElementById('hoverTip');
+      tip.innerHTML = thingLabel(key);
+      tip.style.display = 'block';
+      moveHoverTip(ev);
+    }
+    function moveHoverTip(ev) {
+      const tip = document.getElementById('hoverTip');
+      const host = document.getElementById('mapCanvas').getBoundingClientRect();
+      tip.style.left = (ev.clientX - host.left) + 'px';
+      tip.style.top = (ev.clientY - host.top) + 'px';
+    }
+    function hideHoverTip() { document.getElementById('hoverTip').style.display = 'none'; }
+
+    /* --- pan & zoom --- */
+    function applyViewBox() {
+      const svg = document.getElementById('netSvg');
+      const b = state._bounds;
+      if (!b) return;
+      const s = state.pan.scale;
+      const w = b.spanX / s, h = b.spanY / s;
+      const cx = b.minX + b.spanX / 2 + state.pan.x;
+      const cy = b.minY + b.spanY / 2 + state.pan.y;
+      svg.setAttribute('viewBox', `${cx - w / 2} ${cy - h / 2} ${w} ${h}`);
+    }
+    function fitView() { state.pan = { x: 0, y: 0, scale: 1 }; applyViewBox(); }
+
+    const svgEl = document.getElementById('netSvg');
+    let dragStart = null;
+    let dragMoved = false;
+    svgEl.addEventListener('mousedown', (e) => {
+      dragStart = { x: e.clientX, y: e.clientY, pan: { ...state.pan } };
+      dragMoved = false;
+      svgEl.classList.add('dragging');
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragStart || !state._bounds) return;
+      const rect = svgEl.getBoundingClientRect();
+      const b = state._bounds;
+      const dx = (e.clientX - dragStart.x) / rect.width * (b.spanX / state.pan.scale);
+      const dy = (e.clientY - dragStart.y) / rect.height * (b.spanY / state.pan.scale);
+      if (Math.abs(e.clientX - dragStart.x) > 3 || Math.abs(e.clientY - dragStart.y) > 3) dragMoved = true;
+      state.pan.x = dragStart.pan.x - dx;
+      state.pan.y = dragStart.pan.y - dy;
+      applyViewBox();
+    });
+    window.addEventListener('mouseup', () => { dragStart = null; svgEl.classList.remove('dragging'); });
+    svgEl.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      state.pan.scale = Math.max(0.5, Math.min(20, state.pan.scale * factor));
+      applyViewBox();
+    }, { passive: false });
+    svgEl.addEventListener('click', () => { if (!dragMoved) selectThing(null); });
+
+    document.getElementById('btnZoomIn').addEventListener('click', () => { state.pan.scale = Math.min(20, state.pan.scale * 1.3); applyViewBox(); });
+    document.getElementById('btnZoomOut').addEventListener('click', () => { state.pan.scale = Math.max(0.5, state.pan.scale / 1.3); applyViewBox(); });
+    document.getElementById('btnFit').addEventListener('click', fitView);
+
+    /* ==========================================================
+       SELECTION / INSPECTEUR
+       ========================================================== */
+    function selectThing(thingId) {
+      state.selected = thingId;
+      renderSnapshotOnMap();
+      renderInspector();
+      renderTable();
+    }
+
+    function renderInspector() {
+      const body = document.getElementById('inspectorBody');
+      const existing = body.querySelector('#selectionBlock');
+      if (existing) existing.remove();
+
+      if (!state.selected || !state.snapshot) {
+        body.querySelector('.empty-hint').style.display = 'block';
+        return;
+      }
+
+      const data = state.snapshot.things[state.selected];
+      if (!data) {
+        body.querySelector('.empty-hint').style.display = 'block';
+        return;
+      }
+      body.querySelector('.empty-hint').style.display = 'none';
+
+      const [type, ...rest] = state.selected.split('-');
+      const id = rest.join('-');
+
+      const block = document.createElement('div');
+      block.id = 'selectionBlock';
+
+      let rows = '';
+      if (data.status !== undefined) {
+        const badgeClass = data.status === 'Open' ? 'open' : (data.status === 'Active' ? 'active' : 'closed');
+        rows += `<div class="field"><div class="k">Identifiant</div><div class="v">${type} · ${id}</div></div>`;
+        rows += `<div class="field"><div class="k">Statut</div><div class="v"><span class="badge ${badgeClass}">${data.status}</span></div></div>`;
+        rows += `<div class="field"><div class="k">Débit</div><div class="v">${fmt(data.flowrate_m3s, 4)} m³/s</div></div>`;
+        if (data.velocity_ms !== null && data.velocity_ms !== undefined) {
+          rows += `<div class="field"><div class="k">Vitesse</div><div class="v">${fmt(data.velocity_ms, 3)} m/s</div></div>`;
+        }
+        block.innerHTML = rows + `
+      <div class="ctrl-row">
+        <button class="primary" id="btnOpenLink" ${data.status === 'Open' ? 'disabled' : ''}>Ouvrir</button>
+        <button class="danger" id="btnCloseLink" ${data.status === 'Closed' ? 'disabled' : ''}>Fermer</button>
+      </div>`;
+        body.insertBefore(block, body.querySelector('hr.sep'));
+        document.getElementById('btnOpenLink')?.addEventListener('click', () => sendControl(state.selected, 'open'));
+        document.getElementById('btnCloseLink')?.addEventListener('click', () => sendControl(state.selected, 'closed'));
+      } else {
+        rows += `<div class="field"><div class="k">Identifiant</div><div class="v">${type} · ${id}</div></div>`;
+        if ('pressure_m' in data) rows += `<div class="field"><div class="k">Pression</div><div class="v">${fmt(data.pressure_m)} m</div></div>`;
+        if ('level_head_m' in data) rows += `<div class="field"><div class="k">Niveau (charge)</div><div class="v">${fmt(data.level_head_m)} m</div></div>`;
+        if ('head_m' in data) rows += `<div class="field"><div class="k">Charge</div><div class="v">${fmt(data.head_m)} m</div></div>`;
+        if ('demand_m3s' in data) rows += `<div class="field"><div class="k">Demande</div><div class="v">${fmt(data.demand_m3s, 5)} m³/s</div></div>`;
+        block.innerHTML = rows;
+        body.insertBefore(block, body.querySelector('hr.sep'));
+      }
+    }
+
+    async function sendControl(thingId, status) {
+      try {
+        const snap = await api('PUT', '/control', { link_id: thingId, status });
+        state.snapshot = snap;
+        renderSnapshotOnMap();
+        renderInspector();
+        renderGauges();
+        renderTable();
+        toast(`${thingId} → ${status === 'open' ? 'ouvert' : 'fermé'}`, 'ok');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    /* ==========================================================
+       TEMPS / SNAPSHOT
+       ========================================================== */
+    async function refreshSnapshot() {
+      state.snapshot = await api('GET', '/snapshot');
+      applySnapshot();
+    }
+    function applySnapshot() {
+      const s = state.snapshot;
+      const t = fmtTime(s.sim_time_s);
+      document.getElementById('timeReadout').textContent = t.main;
+      document.getElementById('timeReadoutSub').textContent = ' ' + t.sub;
+      document.getElementById('timeSlider').value = s.tick_index;
+      document.getElementById('btnStepFwd').disabled = s.is_finished;
+      document.getElementById('btnPlay').textContent = state.isPlaying ? '⏸' : '▶';
+      renderSnapshotOnMap();
+      renderInspector();
+      renderGauges();
+      renderTable();
+    }
+
+    function renderGauges() {
+      const things = state.snapshot.things;
+      const junctions = Object.entries(things).filter(([k]) => k.startsWith('junction-')).map(([, v]) => v);
+      const avgP = junctions.length ? junctions.reduce((a, v) => a + v.pressure_m, 0) / junctions.length : 0;
+
+      const links = Object.entries(things).filter(([k]) => k.startsWith('pipe-') || k.startsWith('pump-') || k.startsWith('valve-'));
+      const openLinks = links.filter(([, v]) => v.status === 'Open' || v.status === 'Active');
+      const totalFlow = openLinks.reduce((a, [, v]) => a + Math.abs(v.flowrate_m3s), 0);
+
+      document.getElementById('gAvgPressure').innerHTML = `${fmt(avgP, 1)} <small>m</small>`;
+      document.getElementById('gAvgPressureBar').style.width = `${Math.max(0, Math.min(100, avgP))}%`;
+      document.getElementById('gTotalFlow').innerHTML = `${fmt(totalFlow, 3)} <small>m³/s</small>`;
+      document.getElementById('gLinksOpen').textContent = `${openLinks.length} / ${links.length}`;
+      document.getElementById('gLinksOpenBar').style.width = `${links.length ? openLinks.length / links.length * 100 : 0}%`;
+
+      const progress = state.snapshot.duration_s ? (state.snapshot.sim_time_s / state.snapshot.duration_s * 100) : 0;
+      document.getElementById('gProgress').innerHTML = `${fmt(progress, 0)} <small>%</small>`;
+      document.getElementById('gProgressBar').style.width = `${progress}%`;
+
+      const counts = {};
+      state.things.forEach(t => { counts[t.type] = (counts[t.type] || 0) + 1; });
+      document.getElementById('gComponents').innerHTML =
+        Object.entries(counts).map(([k, v]) => `${v} ${k}${v > 1 ? 's' : ''}`).join('<br>');
+    }
+
+    /* --- transport --- */
+    async function stepForward() {
+      try {
+        const snap = await api('POST', '/advance');
+        state.snapshot = snap;
+        applySnapshot();
+        if (!snap.advanced) { stopPlay(); }
+      } catch (err) { toast(err.message, 'error'); stopPlay(); }
+    }
+    async function goToTick(idx) {
+      try { state.snapshot = await api('POST', '/tick', { index: idx }); applySnapshot(); }
+      catch (err) { toast(err.message, 'error'); }
+    }
+    function startPlay() {
+      if (state.isPlaying) return;
+      state.isPlaying = true;
+      document.getElementById('btnPlay').textContent = '⏸';
+      const delay = parseInt(document.getElementById('speedSelect').value, 10);
+      state.playTimer = setInterval(stepForward, delay);
+    }
+    function stopPlay() {
+      state.isPlaying = false;
+      document.getElementById('btnPlay').textContent = '▶';
+      clearInterval(state.playTimer);
+    }
+    document.getElementById('btnPlay').addEventListener('click', () => state.isPlaying ? stopPlay() : startPlay());
+    document.getElementById('btnStepFwd').addEventListener('click', () => { stopPlay(); stepForward(); });
+    document.getElementById('btnStepBack').addEventListener('click', () => { stopPlay(); goToTick(Math.max(0, state.snapshot.tick_index - 1)); });
+    document.getElementById('btnFirst').addEventListener('click', () => { stopPlay(); goToTick(0); });
+    document.getElementById('timeSlider').addEventListener('input', (e) => { stopPlay(); goToTick(parseInt(e.target.value, 10)); });
+    document.getElementById('speedSelect').addEventListener('change', () => { if (state.isPlaying) { stopPlay(); startPlay(); } });
+
+    document.getElementById('btnResetControls').addEventListener('click', async () => {
+      if (!confirm('Effacer toutes les commandes appliquées et revenir au réseau nominal ?')) return;
+      stopPlay();
+      try {
+        state.snapshot = await api('POST', '/reset-controls');
+        selectThing(null);
+        applySnapshot();
+        toast('Commandes réinitialisées — réseau nominal', 'ok');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    /* ==========================================================
+       TABLEAUX
+       ========================================================== */
+    const TABLE_COLUMNS = {
+      nodes: [
+        { key: 'id', label: 'ID' }, { key: 'type', label: 'Type' },
+        { key: 'pressure', label: 'Pression (m)' }, { key: 'extra', label: 'Demande / Charge' },
+      ],
+      links: [
+        { key: 'id', label: 'ID' }, { key: 'type', label: 'Type' },
+        { key: 'flow', label: 'Débit (m³/s)' }, { key: 'velocity', label: 'Vitesse (m/s)' }, { key: 'status', label: 'Statut' },
+      ]
+    };
+
+    document.getElementById('tabNodes').addEventListener('click', () => { state.activeTable = 'nodes'; switchTab(); });
+    document.getElementById('tabLinks').addEventListener('click', () => { state.activeTable = 'links'; switchTab(); });
+    function switchTab() {
+      document.getElementById('tabNodes').classList.toggle('active', state.activeTable === 'nodes');
+      document.getElementById('tabLinks').classList.toggle('active', state.activeTable === 'links');
+      state.tableSort = { key: 'id', dir: 1 };
+      renderTable();
+    }
+    document.getElementById('tableSearch').addEventListener('input', renderTable);
+
+    function buildTableRows() {
+      if (!state.snapshot) return [];
+      const things = state.snapshot.things;
+      if (state.activeTable === 'nodes') {
+        return Object.entries(things)
+          .filter(([k]) => k.startsWith('junction-') || k.startsWith('tank-') || k.startsWith('reservoir-'))
+          .map(([k, v]) => {
+            const [type, ...rest] = k.split('-'); const id = rest.join('-');
+            const pressure = 'pressure_m' in v ? v.pressure_m : null;
+            const extra = 'demand_m3s' in v ? `${fmt(v.demand_m3s, 5)} m³/s` : ('level_head_m' in v ? `${fmt(v.level_head_m)} m` : `${fmt(v.head_m)} m`);
+            return { thingId: k, id, type, pressure, extra };
+          });
+      }
+      return Object.entries(things)
+        .filter(([k]) => k.startsWith('pipe-') || k.startsWith('pump-') || k.startsWith('valve-'))
+        .map(([k, v]) => {
+          const [type, ...rest] = k.split('-'); const id = rest.join('-');
+          return { thingId: k, id, type, flow: v.flowrate_m3s, velocity: v.velocity_ms, status: v.status };
+        });
+    }
+
+    function renderTable() {
+      const cols = TABLE_COLUMNS[state.activeTable];
+      const head = document.getElementById('tableHead');
+      head.innerHTML = cols.map(c => {
+        const arrow = state.tableSort.key === c.key ? (state.tableSort.dir > 0 ? '▲' : '▼') : '';
+        return `<th data-key="${c.key}">${c.label}<span class="arrow">${arrow}</span></th>`;
+      }).join('');
+      head.querySelectorAll('th').forEach(th => {
+        th.onclick = () => {
+          const key = th.dataset.key;
+          state.tableSort.dir = state.tableSort.key === key ? -state.tableSort.dir : 1;
+          state.tableSort.key = key;
+          renderTable();
+        };
+      });
+
+      let rows = buildTableRows();
+      const q = document.getElementById('tableSearch').value.trim().toLowerCase();
+      if (q) rows = rows.filter(r => r.id.toLowerCase().includes(q));
+
+      const sk = state.tableSort.key, sd = state.tableSort.dir;
+      rows.sort((a, b) => {
+        let av = sk === 'pressure' ? a.pressure : sk === 'flow' ? a.flow : sk === 'velocity' ? a.velocity : a[sk];
+        let bv = sk === 'pressure' ? b.pressure : sk === 'flow' ? b.flow : sk === 'velocity' ? b.velocity : b[sk];
+        if (typeof av === 'string') return sd * String(av).localeCompare(String(bv));
+        return sd * ((av ?? -Infinity) - (bv ?? -Infinity));
+      });
+
+      document.getElementById('tableCount').textContent = `${rows.length} éléments`;
+
+      const body = document.getElementById('tableBody');
+      if (state.activeTable === 'nodes') {
+        body.innerHTML = rows.map(r => `
+      <tr class="${state.selected === r.thingId ? 'selected' : ''}" data-thing="${r.thingId}">
+        <td>${r.id}</td><td>${r.type}</td><td>${fmt(r.pressure)}</td><td>${r.extra}</td>
+      </tr>`).join('');
+      } else {
+        body.innerHTML = rows.map(r => {
+          const badgeClass = r.status === 'Open' ? 'open' : (r.status === 'Active' ? 'active' : 'closed');
+          return `<tr class="${state.selected === r.thingId ? 'selected' : ''}" data-thing="${r.thingId}">
+        <td>${r.id}</td><td>${r.type}</td><td>${fmt(r.flow, 4)}</td>
+        <td>${r.velocity !== null && r.velocity !== undefined ? fmt(r.velocity, 3) : '–'}</td>
+        <td><span class="badge ${badgeClass}">${r.status}</span></td>
+      </tr>`;
+        }).join('');
+      }
+      body.querySelectorAll('tr').forEach(tr => {
+        tr.addEventListener('click', () => selectThing(tr.dataset.thing));
+      });
+    }
+
+    /* init tabs */
+    switchTab();
+    pollHealth();
+  </script>
+</body>
+
+</html>
