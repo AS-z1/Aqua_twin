@@ -816,7 +816,7 @@
     <div id="apiSettings"
       style="display:none; padding:10px 18px; border-bottom:1px solid var(--border-soft); background:var(--panel); gap:10px; align-items:center;">
       <span style="color:var(--muted); font-size:12px;">Adresse de l'API :</span>
-      <input type="text" id="apiBaseInput" style="width:280px;" value="http://127.0.0.1:8000/api">
+      <input type="text" id="apiBaseInput" style="width:280px;" value="">
       <button id="apiBaseSave" class="primary">Appliquer</button>
     </div>
 
@@ -1013,7 +1013,8 @@
        ETAT GLOBAL
        ========================================================== */
     const state = {
-      apiBase: 'http://127.0.0.1:8000/api',
+      // 🌟 DÉTECTION AUTOMATIQUE : fonctionne en local ET sur Render
+      apiBase: window.location.origin + '/api',
       loaded: false,
       topology: null,
       things: [],
@@ -1028,6 +1029,9 @@
       activeTable: 'nodes',
       tableSort: { key: 'id', dir: 1 },
     };
+
+    // Initialiser le champ de saisie avec l'URL détectée pour que l'utilisateur la voie
+    document.getElementById('apiBaseInput').value = state.apiBase;
 
     /* ==========================================================
        UTILITAIRES
