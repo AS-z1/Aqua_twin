@@ -14,6 +14,9 @@
   <!-- Leaflet : carte reelle OpenStreetMap (vue facultative) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Rapport PDF : capture du rapport en image puis generation d'un PDF telechargeable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     /* ============================================================
        SYSTEME DE THEMES (sombre par defaut, clair optionnel)
@@ -80,10 +83,39 @@
 
       --ok-dim: rgba(24, 150, 90, 0.12);
       --fault-dim: rgba(197, 60, 60, 0.12);
+      --select: #1a73c7;
       --select-dim: rgba(29, 120, 224, 0.12);
+      --accent-grad: linear-gradient(135deg, #1565a8, #12906a);
       --shadow-sm: 0 1px 3px rgba(20, 40, 60, 0.12);
       --shadow-md: 0 6px 18px rgba(20, 40, 60, 0.12);
       --shadow-lg: 0 12px 34px rgba(20, 40, 60, 0.16);
+    }
+
+    /* ---- corrections pour le mode clair : les couleurs hardcoded du theme sombre ---- */
+    :root[data-theme="light"] .section-title { color: #1a2c38; }
+    :root[data-theme="light"] .chart-card h4 { color: #1a2c38; }
+    :root[data-theme="light"] button.primary { color: #1565a8; }
+    :root[data-theme="light"] button.danger { color: #b52e2e; }
+    :root[data-theme="light"] .nav-links a.active { color: #1565a8; }
+    :root[data-theme="light"] .nav-links a:hover { background: rgba(0, 0, 0, 0.04); }
+    :root[data-theme="light"] .status-pill { background: rgba(240, 245, 248, 0.9); }
+    :root[data-theme="light"] .status-pill.live { color: #178a53; }
+    :root[data-theme="light"] .status-pill.down { color: #c53434; }
+    :root[data-theme="light"] .toast.error { color: #b52e2e; }
+    :root[data-theme="light"] .toast.ok { color: #178a53; }
+    /* hero h2 : remplace le degrade blanc→bleu clair par un degrade sombre lisible */
+    :root[data-theme="light"] .hero h2 {
+      background: linear-gradient(90deg, #1a2c38, #1565a8);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    /* stat-card .num : degrade accent plus fonce pour le fond blanc */
+    :root[data-theme="light"] .stat-card .num {
+      background: linear-gradient(135deg, #1565a8, #12906a);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
 
     * {
@@ -2726,7 +2758,7 @@
        Le navigateur affiche sa boite "Imprimer" : l'utilisateur
        choisit "Enregistrer en PDF" pour obtenir le fichier.
        ========================================================== */
-    function generateReportHtml() {
+    function generateReportHtml(networkImg) {
       const s = state.snapshot;
       const now = new Date();
       const dateStr = now.toLocaleDateString('fr-FR') + ' ' + now.toLocaleTimeString('fr-FR');
@@ -2781,6 +2813,9 @@
         <p class="rpt-meta">Rapport généré le ${dateStr} · Jumeau numérique hydraulique</p>
         <h2>Paramètres de la simulation</h2>
         <table>${headerCells}</table>
+        <h2>Schéma du réseau</h2>
+        ${networkImg ? `<div style="text-align:center;margin:8px 0;"><img src="${networkImg}" style="max-width:100%;height:auto;border:1px solid #c6d2da;border-radius:8px;"></div>`
+          : '<p style="color:#5b6d78;">Schéma non disponible (chargez un réseau).</p>'}
         <h2>Indicateur réseau</h2>
         ${chartImg || '<p style="color:#5b6d78;">Graphe non disponible (chargez un réseau et ouvrez la page Graphes).</p>'}
         <h2>Données — ${state.activeTable === 'nodes' ? 'Nœuds' : 'Liens'} (${rows.length})</h2>
@@ -2791,14 +2826,93 @@
         <div class="rpt-foot">Aqua Twin v2.0 · ${dateStr}</div>`;
     }
 
+    // Serialise un element <svg> en image PNG (data URL) pour l'embarquer dans le rapport.
+    function svgToDataURL(svgEl) {
+      const clone = svgEl.cloneNode(true);
+      // Fond blanc pour la lisibilite dans le rapport (le SVG est en fond clair)
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bg.setAttribute('x', '-10000'); bg.setAttribute('y', '-10000');
+      bg.setAttribute('width', '20000'); bg.setAttribute('height', '20000');
+      bg.setAttribute('fill', '#ffffff');
+      clone.insertBefore(bg, clone.firstChild);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      // Toujours cadrer le reseau en entier (etat "fit") pour le rapport
+      const b = state._bounds;
+      const vb = b
+        ? `${b.minX} ${b.minY} ${b.spanX} ${b.spanY}`
+        : (svgEl.getAttribute('viewBox') || '0 0 1000 700');
+      clone.setAttribute('viewBox', vb);
+      const vbParts = vb.split(/\s+/);
+      const vw = parseFloat(vbParts[2]), vh = parseFloat(vbParts[3]);
+      const w = 1000, h = Math.round(w * vh / vw) || 700;
+      const svgData = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(clone));
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve('');
+        img.src = svgData;
+      });
+    }
+
     // Ouvre la boite de dialogue "Imprimer" avec le rapport -> PDF
-    function exportPdf() {
+    async function exportPdf() {
       if (!state.snapshot) { toast('Chargez d\'abord un réseau', 'error'); return; }
+      toast('Génération du rapport PDF...', 'ok');
+      // 0) Capture du schema du reseau (SVG) en image a inclure dans le rapport
+      let networkImg = '';
+      const netSvg = document.getElementById('netSvg');
+      if (netSvg && netSvg.querySelector('.net-node')) {
+        try { networkImg = await svgToDataURL(netSvg); } catch (e) { networkImg = ''; }
+      }
+      // 1) Rendu du rapport (avec le schema du reseau en PNG)
       const report = document.getElementById('printReport');
-      report.innerHTML = generateReportHtml();
-      toast('Ouverture de l\'aperçu du rapport (choisissez "Enregistrer en PDF")', 'ok');
-      // petit delai pour laisser le navigateur rendre le rapport
-      setTimeout(() => window.print(), 150);
+      report.innerHTML = generateReportHtml(networkImg);
+      // html2canvas ignore les elements display:none : on rend le rapport
+      // visible hors-ecran le temps de la capture, puis on restaure.
+      const prevStyle = report.getAttribute('style') || '';
+      report.style.cssText = 'display:block;position:fixed;top:0;left:-10000px;width:900px;background:#fff;opacity:0.999;';
+      // Attendre le chargement des images (schema + graphe) dans le rapport
+      await Promise.all(Array.from(report.querySelectorAll('img')).map(img =>
+        img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+      ));
+      // petit delai pour laisser le navigateur calculer la mise en page
+      await new Promise(r => setTimeout(r, 120));
+      // 2) Capture du rapport en image haute resolution
+      let canvas;
+      try {
+        canvas = await html2canvas(report, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+      } catch (e) {
+        report.setAttribute('style', prevStyle);
+        toast('Erreur de capture du rapport', 'error'); return;
+      }
+      report.setAttribute('style', prevStyle);
+      // 3) Decoupage de l'image en pages A4 et generation du PDF telechargeable
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageW = 210, pageH = 297, margin = 12;
+      const contentW = pageW - 2 * margin;
+      const imgH = canvas.height * contentW / canvas.width;
+      let heightLeft = imgH;
+      let position = margin;
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', margin, position, contentW, imgH);
+      heightLeft -= (pageH - 2 * margin);
+      while (heightLeft > 0) {
+        position = position - (pageH - 2 * margin);
+        pdf.addPage();
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', margin, position, contentW, imgH);
+        heightLeft -= (pageH - 2 * margin);
+      }
+      // 4) Telechargement direct du fichier PDF
+      const filename = 'aqua_twin_rapport_' + new Date().toISOString().slice(0, 10) + '.pdf';
+      pdf.save(filename);
+      toast('Rapport PDF téléchargé : ' + filename, 'ok');
     }
 
     // Bouton PDF de la barre de la page Simulation
